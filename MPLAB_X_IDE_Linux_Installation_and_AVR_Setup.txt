@@ -1,0 +1,217 @@
+MPLAB X IDE LINUX INSTALLATION AND AVR ASSEMBLY SETUP
+======================================================
+
+Date: 2026-09-11
+Host: Linux/Ubuntu x86_64
+Target device: ATmega328P
+Assembly toolchain: AVR GNU
+
+
+1. CHECK THE LINUX SYSTEM
+--------------------------
+
+Run:
+
+    uname -m
+
+Expected result for a 64-bit PC:
+
+    x86_64
+
+Use a 64-bit Linux installation.
+
+
+2. INSTALL MPLAB X IDE
+----------------------
+
+Open the official Microchip download page:
+
+    https://www.microchip.com/en-us/development-tool/mplab-x-ide
+
+Download the Linux 64-bit installer. The version used in this setup was
+MPLAB X IDE v6.35.
+
+Open a terminal and go to the download directory:
+
+    cd ~/Downloads
+
+Extract the downloaded archive. Replace the filename if the downloaded
+version is different:
+
+    tar -xf MPLABX-v6.35-linux-installer.tar
+
+Run the installer:
+
+    sudo ./MPLABX-v6.35-linux-installer.sh
+
+Follow the graphical installer, accept the license, keep the default
+components selected, and finish the installation. Restart Linux afterward
+so USB programmer/debugger drivers can work correctly.
+
+Official installation guide:
+
+    https://developerhelp.microchip.com/xwiki/bin/view/software-tools/ides/x/install-guide/
+
+The default MPLAB X IDE installation directory is commonly:
+
+    /opt/microchip/mplabx/v6.35
+
+
+3. INSTALL THE AVR GNU TOOLCHAIN
+--------------------------------
+
+Download the Linux AVR 8-bit GNU Toolchain from:
+
+    https://www.microchip.com/en-us/development-tool/avr-gcc
+
+After installing or extracting the toolchain, open MPLAB X and check:
+
+    Tools -> Options -> Embedded -> Build Tools
+
+Make sure AVR GNU is listed. If it is not listed, click Add and select the
+toolchain directory containing the bin folder.
+
+Toolchain verification can be done with:
+
+    /usr/bin/avr-gcc
+    avr-gcc (GCC) 14.3.0
+
+
+4. CREATE THE AVR PROJECT
+-------------------------
+
+In MPLAB X IDE:
+
+    File -> New Project
+    Category: Microchip Embedded
+    Project: Standalone Project
+    Device: ATmega328P
+    Hardware Tool: Simulator or connected programmer
+    Toolchain: AVR GNU
+    Project name: project_1
+
+The project can be stored in:
+
+    ~/MPLABXProjects/project_1.X
+
+Linux is case-sensitive, so use the project name and path consistently.
+
+
+5. ADD THE ASSEMBLY FILE
+------------------------
+
+In the Projects pane:
+
+    Right-click Source Files
+    Select New -> Other -> Empty File
+    Name the file main.S
+
+Use uppercase .S for AVR GNU assembly with C-preprocessor support. Do not
+use .asm with the AVR GNU toolchain.
+
+If main.S already exists outside the project, use:
+
+    Right-click Source Files -> Add Existing Item -> main.S
+
+Make sure main.S is included in the project and is not excluded from the
+active default configuration.
+
+
+6. AVR-GNU LED BLINKING PROGRAM
+-------------------------------
+
+The following program is for an ATmega328P with an LED connected to PB0.
+It assumes a 16 MHz clock.
+
+    #include <avr/io.h>
+
+    .text
+    .global main
+    .type main, @function
+
+    main:
+        sbi _SFR_IO_ADDR(DDRB), 0       /* PB0 as output */
+
+    loop:
+        sbi _SFR_IO_ADDR(PORTB), 0      /* LED on */
+        rcall delay
+        cbi _SFR_IO_ADDR(PORTB), 0      /* LED off */
+        rcall delay
+        rjmp loop
+
+    /* Approximate delay for a 16 MHz clock. */
+    delay:
+        ldi r18, 25
+
+    delay_outer:
+        ldi r19, 255
+
+    delay_middle:
+        ldi r20, 255
+
+    delay_inner:
+        dec r20
+        brne delay_inner
+        dec r19
+        brne delay_middle
+        dec r18
+        brne delay_outer
+        ret
+
+The program turns PB0 on, waits, turns it off, waits again, and repeats.
+
+
+7. BUILD THE PROJECT
+--------------------
+
+In MPLAB X, select:
+
+    Run -> Clean and Build Project
+
+The equivalent terminal command is:
+
+    cd ~/MPLABXProjects/project_1.X
+    make -f nbproject/Makefile-default.mk SUBPROJECTS= .build-conf
+
+The generated HEX file is located at:
+
+    ~/MPLABXProjects/project_1.X/dist/default/production/project_1.X.production.hex
+
+8. VIEW REGISTERS DURING DEBUGGING
+----------------------------------
+
+1. Click Debug Main Project (the bug icon).
+2. Set a breakpoint at ldi r18, 25, or click Pause after debugging starts.
+3. Open:
+
+       Window -> Target Memory Views -> CPU Registers
+
+4. View registers R0 through R31.
+5. Use the Step Into or Step Over buttons to execute one instruction at a
+   time. R18, R19, and R20 are used by the delay routine.
+
+To view DDRB and PORTB, open:
+
+    Window -> Debugging -> IO View
+
+or:
+
+    Window -> Target Memory Views -> SFRs
+
+Register values are updated when the processor is paused during a debug
+session.
+
+
+9. PROGRAM THE MICROCONTROLLER
+------------------------------
+
+Connect the programmer or development board, select it in the project
+properties, and click:
+
+    Make and Program Main Project
+
+For an external LED, connect it to PB0 through a 220-330 ohm resistor.
+
+If using an Arduino Uno's built-in LED, note that its built-in LED is on
+PB5/D13, not PB0. Change the source code to use PB5 if that is the LED being
+used.

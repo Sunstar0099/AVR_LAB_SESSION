@@ -1,0 +1,314 @@
+ATmega328P AVR Assembly in VS Code on Ubuntu
+==============================================
+
+Purpose
+-------
+This guide shows how to assemble a small ATmega328P AVR program in VS Code on Ubuntu using AVRA. It covers a direct terminal build, an optional VS Code build task, and a repeatable Makefile workflow. The main build output is a HEX file that can be loaded into a simulator or flashed to the microcontroller.
+
+1 Prerequisites
+---------------
+
+You need:
+
+- Ubuntu with a working terminal
+- Visual Studio Code
+- AVRA, the AVR macro assembler
+- GNU Make for the Makefile workflow
+- An ATmega328P programmer or simulator if you want to run the generated HEX file
+
+Install AVRA and Make:
+
+```bash
+sudo apt update
+sudo apt install avra make
+```
+
+Verify the tools:
+
+```bash
+avra --version
+make --version
+```
+
+Check the ATmega328P include file. On a standard Ubuntu AVRA installation, it is usually here:
+
+```bash
+find /usr/share/avra -iname 'm328Pdef.inc'
+```
+
+The expected path is:
+
+```text
+/usr/share/avra/m328Pdef.inc
+```
+
+Linux filenames are case-sensitive. Use `m328Pdef.inc` with the same capitalization as the installed file.
+
+2 Create the project
+--------------------
+
+Create a project folder and open it in VS Code:
+
+```bash
+mkdir -p ~/avr-project/.vscode
+cd ~/avr-project
+code .
+```
+
+Create a file named `main.asm` with this code:
+
+```asm
+.include "m328Pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    ; Configure PB0 as an output
+    sbi DDRB, PB0
+
+    ; Drive PB0 high
+    sbi PORTB, PB0
+
+LOOP:
+    rjmp LOOP
+```
+
+What the program does:
+
+- Starts at the reset vector at address `0x0000`
+- Jumps to the `RESET` label
+- Sets PB0 as an output
+- Sets PB0 high
+- Loops forever
+
+3 Project folder structure
+--------------------------
+
+Before building, the project can contain:
+
+```text
+avr-project/
+|-- .vscode/
+|   `-- tasks.json       optional VS Code build task
+|-- main.asm             AVR assembly source
+`-- Makefile             repeatable build commands
+```
+
+The generated files are normally written beside `main.asm` by AVRA:
+
+```text
+avr-project/
+|-- main.hex             program memory image
+|-- main.eep.hex         EEPROM image
+`-- main.obj             object/debug information
+```
+
+Optional listing, map, or debug files can be created by passing AVRA's `-l`, `-m`, or `-d` options. The basic command does not guarantee a `.cof` file, so use `main.hex` as the primary programming file.
+
+4 Build directly with AVRA
+--------------------------
+
+Open the integrated VS Code terminal in the folder containing `main.asm` and run:
+
+```bash
+cd ~/avr-project
+avra -I /usr/share/avra main.asm
+```
+
+AVRA should finish with a message similar to:
+
+```text
+Assembly complete with no errors.
+```
+
+Confirm that the HEX file exists:
+
+```bash
+ls -l main.hex main.eep.hex main.obj
+```
+
+The important file is:
+
+```text
+main.hex
+```
+
+Use that file when loading the program into a simulator or flashing the ATmega328P.
+
+5 Optional VS Code build task
+-----------------------------
+
+Create `.vscode/tasks.json` and add:
+
+```json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build AVR Assembly",
+            "type": "shell",
+            "command": "avra",
+            "args": [
+                "-I",
+                "/usr/share/avra",
+                "${file}"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
+```
+
+Open `main.asm`, then press `Ctrl+Shift+B`. VS Code runs AVRA in the source file's directory and writes the generated files there.
+
+6 Build with a Makefile
+-----------------------
+
+Create a file named `Makefile` in the project root. Makefile command lines must begin with a real tab, not spaces.
+
+```make
+AVRA ?= avra
+AVRA_INCLUDE ?= /usr/share/avra
+SOURCE := main.asm
+TARGET := main
+
+.PHONY: all build clean rebuild
+
+all: build
+
+build: $(TARGET).hex
+
+$(TARGET).hex: $(SOURCE)
+	$(AVRA) -I "$(AVRA_INCLUDE)" "$(SOURCE)"
+
+clean:
+	rm -f "$(TARGET).hex" "$(TARGET).eep.hex" "$(TARGET).obj" "$(TARGET).lst" "$(TARGET).map" "$(TARGET).dbg"
+
+rebuild:
+	$(MAKE) clean
+	$(MAKE) build
+```
+
+Build the project:
+
+```bash
+make
+```
+
+The default target `all` runs `build`. You can also call the build target explicitly:
+
+```bash
+make build
+```
+
+Remove generated files:
+
+```bash
+make clean
+```
+
+Clean and assemble from scratch:
+
+```bash
+make rebuild
+```
+
+If AVRA is installed in a different location, override the include path for one build:
+
+```bash
+make AVRA_INCLUDE=/path/to/avra/includes rebuild
+```
+
+7 Expected build results
+------------------------
+
+After a successful build, expect these files in the project directory:
+
+```text
+main.hex
+main.eep.hex
+main.obj
+```
+
+File purposes:
+
+- `main.hex` contains the program memory image for the ATmega328P.
+- `main.eep.hex` contains EEPROM data. This example has no EEPROM data, but AVRA still creates the file.
+- `main.obj` contains AVRA object/debug information.
+
+AVRA can create additional files when requested. For example:
+
+```bash
+avra -I /usr/share/avra -l main.lst -m main.map main.asm
+```
+
+The `.lst` file is useful for inspecting assembled addresses and machine code. The `.map` file is useful for reviewing symbol and memory information.
+
+8 Troubleshooting
+-----------------
+
+`avra: command not found`
+
+Install AVRA and verify that it is on the PATH:
+
+```bash
+sudo apt update
+sudo apt install avra
+avra --version
+```
+
+`cannot open include file m328Pdef.inc`
+
+Check the file location and use the include path explicitly:
+
+```bash
+find /usr/share/avra -iname 'm328Pdef.inc'
+avra -I /usr/share/avra main.asm
+```
+
+Also check the capitalization in the `.include` line.
+
+`make: Nothing to be done`
+
+The generated HEX file is newer than `main.asm`, so Make considers the build current. Use this command to force a clean build:
+
+```bash
+make rebuild
+```
+
+`missing separator` from Make
+
+A recipe line probably begins with spaces instead of a tab. Replace the leading spaces before `$(AVRA)`, `rm`, or `$(MAKE)` with one real tab.
+
+VS Code builds the wrong file or writes files somewhere unexpected
+
+Open `main.asm` before pressing `Ctrl+Shift+B`. The task uses `${file}` and `${fileDirname}`, so the active file must be the intended assembly source.
+
+AVRA prints PRAGMA warnings for the device include file
+
+Warnings such as `PRAGMA PARTINC directive currently ignored` can be normal with AVRA's device definition files. Continue if AVRA ends with `Assembly complete with no errors.`
+
+No `main.hex` is produced
+
+Read the first error in the AVRA output. Common causes are a misspelled instruction, an incorrect register name, a missing include file, or invalid syntax. Fix the source and run `make rebuild` or the direct AVRA command again.
+
+9 Final workflow summary
+------------------------
+
+1. Install AVRA and Make.
+2. Create `main.asm` and include `m328Pdef.inc`.
+3. Test the source directly with `avra -I /usr/share/avra main.asm`.
+4. Optionally add `.vscode/tasks.json` and use `Ctrl+Shift+B`.
+5. Add the Makefile for repeatable builds.
+6. Run `make`, `make clean`, or `make rebuild` as needed.
+7. Load or flash `main.hex` with the chosen simulator or programmer.
+
+The source file is `main.asm`; the primary output for the ATmega328P is `main.hex`.

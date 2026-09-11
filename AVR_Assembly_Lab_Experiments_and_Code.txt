@@ -1,0 +1,288 @@
+AVR ASSEMBLY LAB: EXPERIMENT NAMES AND CODE
+Target MCU: ATmega328P
+Assembler: AVRA
+
+Save each experiment in a separate .asm file and assemble it before loading the
+generated .hex file into the ATmega328P in SimulIDE.
+
+===============================================================================
+EXPERIMENT 1: LED ON/OFF USING GPIO
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    ; Configure PB0 as output
+    sbi DDRB, PB0
+
+    ; Make PB0 HIGH
+    sbi PORTB, PB0
+
+LOOP:
+    rjmp LOOP
+
+
+===============================================================================
+EXPERIMENT 2: LED BLINKING USING SOFTWARE DELAY
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    sbi DDRB, PB0
+
+MAIN:
+    sbi PORTB, PB0
+    rcall DELAY
+    cbi PORTB, PB0
+    rcall DELAY
+    rjmp MAIN
+
+DELAY:
+    ldi r18, 40
+D1:
+    ldi r19, 255
+D2:
+    ldi r20, 255
+D3:
+    dec r20
+    brne D3
+    dec r19
+    brne D2
+    dec r18
+    brne D1
+    ret
+
+
+===============================================================================
+EXPERIMENT 3: PUSH BUTTON CONTROLS LED
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    sbi DDRB, PB0
+    cbi DDRD, PD2
+    sbi PORTD, PD2
+
+MAIN:
+    ; Skip next instruction if PD2 is LOW
+    sbic PIND, PD2
+    rjmp BUTTON_NOT_PRESSED
+
+BUTTON_PRESSED:
+    sbi PORTB, PB0
+    rjmp MAIN
+
+BUTTON_NOT_PRESSED:
+    cbi PORTB, PB0
+    rjmp MAIN
+
+
+===============================================================================
+EXPERIMENT 4: RUNNING LED PATTERN
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    ldi r16, 0x0F
+    out DDRB, r16
+    ldi r16, 0x01
+
+MAIN:
+    out PORTB, r16
+    rcall DELAY
+    lsl r16
+    cpi r16, 0x10
+    brne MAIN
+    ldi r16, 0x01
+    rjmp MAIN
+
+DELAY:
+    ldi r18, 30
+D1:
+    ldi r19, 255
+D2:
+    ldi r20, 255
+D3:
+    dec r20
+    brne D3
+    dec r19
+    brne D2
+    dec r18
+    brne D1
+    ret
+
+
+===============================================================================
+EXPERIMENT 5: PWM GENERATION USING TIMER0
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    ; PD6 / OC0A output
+    sbi DDRD, PD6
+
+    ; Fast PWM, non-inverting
+    ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
+    out TCCR0A, r16
+
+    ; Clock / 64
+    ldi r16, (1<<CS01) | (1<<CS00)
+    out TCCR0B, r16
+
+    ; Approximately 50% duty cycle
+    ldi r16, 128
+    out OCR0A, r16
+
+MAIN:
+    rjmp MAIN
+
+
+===============================================================================
+EXPERIMENT 6: ADC CONTROLS LED BRIGHTNESS
+===============================================================================
+
+.include "m328pdef.inc"
+
+.org 0x0000
+    rjmp RESET
+
+RESET:
+    ; PWM setup
+    sbi DDRD, PD6
+    ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
+    out TCCR0A, r16
+    ldi r16, (1<<CS01) | (1<<CS00)
+    out TCCR0B, r16
+
+    ; ADC setup: AVcc, left adjusted, ADC0
+    ldi r16, (1<<REFS0) | (1<<ADLAR)
+    sts ADMUX, r16
+    ldi r16, (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0)
+    sts ADCSRA, r16
+
+MAIN:
+    ; Start ADC conversion
+    lds r16, ADCSRA
+    ori r16, (1<<ADSC)
+    sts ADCSRA, r16
+
+WAIT_ADC:
+    lds r16, ADCSRA
+    ; Wait while ADSC = 1
+    sbrc r16, ADSC
+    rjmp WAIT_ADC
+
+    ; Read 8-bit ADC result
+    lds r17, ADCH
+
+    ; ADC directly controls PWM
+    out OCR0A, r17
+    rjmp MAIN
+
+
+===============================================================================
+EXPERIMENT 7: INTERRUPT + ADC + PWM INTEGRATED PROJECT
+===============================================================================
+
+.include "m328pdef.inc"
+
+; INTERRUPT VECTOR TABLE
+.org 0x0000
+    rjmp RESET
+.org INT0addr
+    rjmp INT0_ISR
+.org 0x0034
+
+RESET:
+    ; Stack initialization
+    ldi r16, HIGH(RAMEND)
+    out SPH, r16
+    ldi r16, LOW(RAMEND)
+    out SPL, r16
+
+    ; PWM setup on PD6 / OC0A
+    sbi DDRD, PD6
+    ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
+    out TCCR0A, r16
+    ldi r16, (1<<CS01) | (1<<CS00)
+    out TCCR0B, r16
+
+    ; ADC setup: AVcc, left adjusted, ADC0
+    ldi r16, (1<<REFS0) | (1<<ADLAR)
+    sts ADMUX, r16
+    ldi r16, (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0)
+    sts ADCSRA, r16
+
+    ; Button on PD2 / INT0
+    cbi DDRD, PD2
+    sbi PORTD, PD2
+    ldi r16, (1<<ISC01)
+    sts EICRA, r16
+    sbi EIMSK, INT0
+
+    ; Initial state = ON
+    ldi r20, 1
+    sei
+
+MAIN:
+    tst r20
+    breq SYSTEM_OFF
+
+    ; Start ADC conversion
+    lds r16, ADCSRA
+    ori r16, (1<<ADSC)
+    sts ADCSRA, r16
+
+WAIT_ADC:
+    lds r16, ADCSRA
+    sbrc r16, ADSC
+    rjmp WAIT_ADC
+
+    ; ADC to PWM
+    lds r17, ADCH
+    out OCR0A, r17
+    rjmp MAIN
+
+SYSTEM_OFF:
+    clr r16
+    out OCR0A, r16
+    rjmp MAIN
+
+INT0_ISR:
+    ; Save R16
+    push r16
+
+    ; Save status register
+    in r16, SREG
+    push r16
+
+    ; Toggle system state
+    ldi r16, 1
+    eor r20, r16
+
+    ; Restore SREG
+    pop r16
+    out SREG, r16
+
+    ; Restore R16
+    pop r16
+    reti
