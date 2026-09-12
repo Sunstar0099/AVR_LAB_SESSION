@@ -1,25 +1,27 @@
 AVR ASSEMBLY LAB: EXPERIMENT NAMES AND CODE
 Target MCU: ATmega328P
-Assembler: AVRA
+Toolchain: MPLAB X IDE with AVR-GCC
 
-Save each experiment in a separate .asm file and assemble it before loading the
-generated .hex file into the ATmega328P in SimulIDE.
+Save each experiment in a separate .S file (capital S). The capital S enables
+the C preprocessor, which expands <avr/io.h> and the _SFR_* register macros.
+Build one experiment at a time in a normal AVR-GCC/MPLAB X project with the
+standard startup code enabled. Each source file defines main.
 
 ===============================================================================
 EXPERIMENT 1: LED ON/OFF USING GPIO
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
+.text
+.global main
+.type main, @function
+main:
     ; Configure PB0 as output
-    sbi DDRB, PB0
+    sbi _SFR_IO_ADDR(DDRB), DDB0
 
     ; Make PB0 HIGH
-    sbi PORTB, PB0
+    sbi _SFR_IO_ADDR(PORTB), PORTB0
 
 LOOP:
     rjmp LOOP
@@ -29,18 +31,18 @@ LOOP:
 EXPERIMENT 2: LED BLINKING USING SOFTWARE DELAY
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
-    sbi DDRB, PB0
+.text
+.global main
+.type main, @function
+main:
+    sbi _SFR_IO_ADDR(DDRB), DDB0
 
 MAIN:
-    sbi PORTB, PB0
+    sbi _SFR_IO_ADDR(PORTB), PORTB0
     rcall DELAY
-    cbi PORTB, PB0
+    cbi _SFR_IO_ADDR(PORTB), PORTB0
     rcall DELAY
     rjmp MAIN
 
@@ -64,27 +66,27 @@ D3:
 EXPERIMENT 3: PUSH BUTTON CONTROLS LED
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
-    sbi DDRB, PB0
-    cbi DDRD, PD2
-    sbi PORTD, PD2
+.text
+.global main
+.type main, @function
+main:
+    sbi _SFR_IO_ADDR(DDRB), DDB0
+    cbi _SFR_IO_ADDR(DDRD), DDD2
+    sbi _SFR_IO_ADDR(PORTD), PORTD2
 
 MAIN:
     ; Skip next instruction if PD2 is LOW
-    sbic PIND, PD2
+    sbic _SFR_IO_ADDR(PIND), PIND2
     rjmp BUTTON_NOT_PRESSED
 
 BUTTON_PRESSED:
-    sbi PORTB, PB0
+    sbi _SFR_IO_ADDR(PORTB), PORTB0
     rjmp MAIN
 
 BUTTON_NOT_PRESSED:
-    cbi PORTB, PB0
+    cbi _SFR_IO_ADDR(PORTB), PORTB0
     rjmp MAIN
 
 
@@ -92,18 +94,18 @@ BUTTON_NOT_PRESSED:
 EXPERIMENT 4: RUNNING LED PATTERN
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
+.text
+.global main
+.type main, @function
+main:
     ldi r16, 0x0F
-    out DDRB, r16
+    out _SFR_IO_ADDR(DDRB), r16
     ldi r16, 0x01
 
 MAIN:
-    out PORTB, r16
+    out _SFR_IO_ADDR(PORTB), r16
     rcall DELAY
     lsl r16
     cpi r16, 0x10
@@ -131,26 +133,26 @@ D3:
 EXPERIMENT 5: PWM GENERATION USING TIMER0
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
+.text
+.global main
+.type main, @function
+main:
     ; PD6 / OC0A output
-    sbi DDRD, PD6
+    sbi _SFR_IO_ADDR(DDRD), DDD6
 
     ; Fast PWM, non-inverting
     ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
-    out TCCR0A, r16
+    out _SFR_IO_ADDR(TCCR0A), r16
 
     ; Clock / 64
     ldi r16, (1<<CS01) | (1<<CS00)
-    out TCCR0B, r16
+    out _SFR_IO_ADDR(TCCR0B), r16
 
     ; Approximately 50% duty cycle
     ldi r16, 128
-    out OCR0A, r16
+    out _SFR_IO_ADDR(OCR0A), r16
 
 MAIN:
     rjmp MAIN
@@ -160,42 +162,42 @@ MAIN:
 EXPERIMENT 6: ADC CONTROLS LED BRIGHTNESS
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-.org 0x0000
-    rjmp RESET
-
-RESET:
+.text
+.global main
+.type main, @function
+main:
     ; PWM setup
-    sbi DDRD, PD6
+    sbi _SFR_IO_ADDR(DDRD), DDD6
     ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
-    out TCCR0A, r16
+    out _SFR_IO_ADDR(TCCR0A), r16
     ldi r16, (1<<CS01) | (1<<CS00)
-    out TCCR0B, r16
+    out _SFR_IO_ADDR(TCCR0B), r16
 
     ; ADC setup: AVcc, left adjusted, ADC0
     ldi r16, (1<<REFS0) | (1<<ADLAR)
-    sts ADMUX, r16
+    sts _SFR_MEM_ADDR(ADMUX), r16
     ldi r16, (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0)
-    sts ADCSRA, r16
+    sts _SFR_MEM_ADDR(ADCSRA), r16
 
 MAIN:
     ; Start ADC conversion
-    lds r16, ADCSRA
+    lds r16, _SFR_MEM_ADDR(ADCSRA)
     ori r16, (1<<ADSC)
-    sts ADCSRA, r16
+    sts _SFR_MEM_ADDR(ADCSRA), r16
 
 WAIT_ADC:
-    lds r16, ADCSRA
+    lds r16, _SFR_MEM_ADDR(ADCSRA)
     ; Wait while ADSC = 1
     sbrc r16, ADSC
     rjmp WAIT_ADC
 
     ; Read 8-bit ADC result
-    lds r17, ADCH
+    lds r17, _SFR_MEM_ADDR(ADCH)
 
     ; ADC directly controls PWM
-    out OCR0A, r17
+    out _SFR_IO_ADDR(OCR0A), r17
     rjmp MAIN
 
 
@@ -203,41 +205,36 @@ WAIT_ADC:
 EXPERIMENT 7: INTERRUPT + ADC + PWM INTEGRATED PROJECT
 ===============================================================================
 
-.include "m328pdef.inc"
+#include <avr/io.h>
 
-; INTERRUPT VECTOR TABLE
-.org 0x0000
-    rjmp RESET
-.org INT0addr
-    rjmp INT0_ISR
-.org 0x0034
+.text
+.global main
+.type main, @function
+.global __vector_1
+.type __vector_1, @function
 
-RESET:
-    ; Stack initialization
-    ldi r16, HIGH(RAMEND)
-    out SPH, r16
-    ldi r16, LOW(RAMEND)
-    out SPL, r16
+/* AVR-GCC startup code initializes the stack and routes INT0 to __vector_1. */
+main:
 
     ; PWM setup on PD6 / OC0A
-    sbi DDRD, PD6
+    sbi _SFR_IO_ADDR(DDRD), DDD6
     ldi r16, (1<<COM0A1) | (1<<WGM01) | (1<<WGM00)
-    out TCCR0A, r16
+    out _SFR_IO_ADDR(TCCR0A), r16
     ldi r16, (1<<CS01) | (1<<CS00)
-    out TCCR0B, r16
+    out _SFR_IO_ADDR(TCCR0B), r16
 
     ; ADC setup: AVcc, left adjusted, ADC0
     ldi r16, (1<<REFS0) | (1<<ADLAR)
-    sts ADMUX, r16
+    sts _SFR_MEM_ADDR(ADMUX), r16
     ldi r16, (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0)
-    sts ADCSRA, r16
+    sts _SFR_MEM_ADDR(ADCSRA), r16
 
     ; Button on PD2 / INT0
-    cbi DDRD, PD2
-    sbi PORTD, PD2
+    cbi _SFR_IO_ADDR(DDRD), DDD2
+    sbi _SFR_IO_ADDR(PORTD), PORTD2
     ldi r16, (1<<ISC01)
-    sts EICRA, r16
-    sbi EIMSK, INT0
+    sts _SFR_MEM_ADDR(EICRA), r16
+    sbi _SFR_IO_ADDR(EIMSK), INT0
 
     ; Initial state = ON
     ldi r20, 1
@@ -248,31 +245,31 @@ MAIN:
     breq SYSTEM_OFF
 
     ; Start ADC conversion
-    lds r16, ADCSRA
+    lds r16, _SFR_MEM_ADDR(ADCSRA)
     ori r16, (1<<ADSC)
-    sts ADCSRA, r16
+    sts _SFR_MEM_ADDR(ADCSRA), r16
 
 WAIT_ADC:
-    lds r16, ADCSRA
+    lds r16, _SFR_MEM_ADDR(ADCSRA)
     sbrc r16, ADSC
     rjmp WAIT_ADC
 
     ; ADC to PWM
-    lds r17, ADCH
-    out OCR0A, r17
+    lds r17, _SFR_MEM_ADDR(ADCH)
+    out _SFR_IO_ADDR(OCR0A), r17
     rjmp MAIN
 
 SYSTEM_OFF:
     clr r16
-    out OCR0A, r16
+    out _SFR_IO_ADDR(OCR0A), r16
     rjmp MAIN
 
-INT0_ISR:
+__vector_1:
     ; Save R16
     push r16
 
     ; Save status register
-    in r16, SREG
+    in r16, _SFR_IO_ADDR(SREG)
     push r16
 
     ; Toggle system state
@@ -281,7 +278,7 @@ INT0_ISR:
 
     ; Restore SREG
     pop r16
-    out SREG, r16
+    out _SFR_IO_ADDR(SREG), r16
 
     ; Restore R16
     pop r16
