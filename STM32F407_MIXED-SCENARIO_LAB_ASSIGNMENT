@@ -1,0 +1,384 @@
+STM32F407 DISCOVERY BOARD
+MIXED-SCENARIO TIMER AND PERIPHERAL LAB ASSIGNMENT
+
+Target board       : STM32F407G-DISC1
+Development        : STM32CubeIDE
+Programming        : STM32 HAL and/or CMSIS
+External components: NOT ALLOWED
+Timer assumption   : Timer clock = 16 MHz unless a question states otherwise
+Debug interface    : Keep SWD/ST-LINK enabled for every question
+
+====================================================================
+PERMITTED ONBOARD RESOURCES
+====================================================================
+
+- PD12: green onboard LED
+- PD13: orange onboard LED
+- PD14: red onboard LED
+- PD15: blue onboard LED
+- PA0 : onboard User push button
+- Onboard accelerometer (LIS3DSH or LIS302DL, depending on board revision)
+- Internal ADC channels, including the MCU temperature sensor and VREFINT
+- STM32 timers, timer channels, timer interrupts and timer-triggered DMA
+- RTC using an internal clock source such as LSI
+- Independent Watchdog (IWDG)
+- DMA, NVIC, EXTI, internal clocks, SRAM and Flash
+- SWD/ST-LINK debugger
+
+Do not add or connect external LEDs, buttons, potentiometers, sensors,
+motors, servos, buzzers, displays, oscilloscopes, logic analyzers, second
+boards, I2C accessories or other external hardware.
+
+For PWM and Output Compare questions, the timer channel output may remain
+unconnected because the onboard LEDs are on PD12-PD15 rather than on the
+timer alternate-function pins. Use the onboard LEDs for visible status and
+use the debugger to verify CCR, CNT, interrupt and DMA values.
+
+====================================================================
+GENERAL INSTRUCTIONS
+====================================================================
+
+1. Create a separate STM32CubeIDE project, or a clearly separated source
+   section, for each question.
+2. Configure clocks and calculate PSC, ARR and CCR values. Record the actual
+   timer clock shown by the clock tree.
+3. Use modular functions for initialization, state changes and processing.
+4. Keep interrupt callbacks short. Set flags or update small state variables;
+   do not place long loops or HAL_Delay() inside an interrupt callback.
+5. Declare variables shared with interrupts as volatile where required.
+6. Test normal operation, boundary values and the failure cases requested.
+7. Use the onboard LEDs and SWD debugger to observe results. Do not depend on
+   external hardware for verification.
+8. Keep SWD enabled and document the important GPIO pins, timer channels,
+   frequencies, thresholds and counter calculations.
+
+====================================================================
+Q1. TRAFFIC SIGNAL TIMING USING TIMER INTERRUPT
+====================================================================
+
+Scenario:
+Create a pedestrian-road traffic sequence using the onboard LEDs. The green
+LED must remain ON for 2 seconds, then the red LED must remain ON for
+1 second, and the sequence must repeat continuously.
+
+LED allocation:
+- PD12 green: road GO
+- PD14 red  : road STOP
+- PD13 and PD15: OFF during this question
+
+Use TIM2 in base-timer interrupt mode. The update interrupt must occur every
+100 ms, and software counters must create the longer intervals.
+
+Tasks:
+1. Configure PD12-PD15 as GPIO outputs.
+2. Configure TIM2 with the internal clock.
+3. Select Prescaler and Counter Period values for a 100 ms interrupt.
+   With a 16 MHz timer clock, one suitable choice is PSC = 15999 and
+   ARR = 99.
+4. Enable the TIM2 global interrupt in the NVIC.
+5. Start TIM2 with HAL_TIM_Base_Start_IT().
+6. Implement the sequence in HAL_TIM_PeriodElapsedCallback(). Count
+   20 interrupts for 2 seconds and 10 interrupts for 1 second.
+7. Use a state variable so that only one LED state is active at a time.
+8. Keep SWD enabled and observe the state and software counters in the
+   debugger.
+
+====================================================================
+Q2. ONBOARD LED BRIGHTNESS INDICATION USING PWM
+====================================================================
+
+Scenario:
+Generate a 1 kHz PWM signal with TIM4 Channel 1 and smoothly sweep its duty
+cycle from minimum to maximum and back. No external LED is permitted. The
+onboard LEDs must display four approximate duty-cycle ranges while the PWM
+registers are inspected through SWD.
+
+Use the following onboard indication:
+- 0-24%   : all LEDs OFF
+- 25-49%  : PD12 ON
+- 50-74%  : PD12 and PD13 ON
+- 75-100% : PD12, PD13, PD14 and PD15 ON
+
+Tasks:
+1. Configure TIM4 Channel 1 in PWM Generation mode.
+2. Use a 16 MHz timer clock and select values for 1 kHz PWM. One suitable
+   choice is PSC = 15, giving a 1 MHz counter, and ARR = 999.
+3. Start PWM with HAL_TIM_PWM_Start().
+4. Change CCR1 periodically so the duty cycle increases and decreases
+   smoothly. For ARR = 999, CCR1 values from 0 through 999 represent
+   approximately 0% through 100% duty cycle.
+5. Update the four onboard LEDs from the calculated duty range without using
+   a blocking delay inside an interrupt.
+6. Observe CCR1, ARR, CNT and the calculated duty percentage in the debugger.
+7. Explain how the PWM duty cycle controls the average power delivered by a
+   load and why the onboard LEDs are being used only as a visual range
+   indicator in this no-external-components assignment.
+
+====================================================================
+Q3. FOUR-STAGE SEQUENCE USING OUTPUT COMPARE
+====================================================================
+
+Scenario:
+After the timer starts, four events must occur at 250 ms, 500 ms, 750 ms and
+1000 ms. Each event must turn on one corresponding onboard LED and leave it
+ON so that the completed sequence can be seen.
+
+Use TIM4 Output Compare Toggle mode with one channel per event:
+- CH1 at 250 ms -> PD12
+- CH2 at 500 ms -> PD13
+- CH3 at 750 ms -> PD14
+- CH4 at 1000 ms -> PD15
+
+Tasks:
+1. Configure TIM4 for a 1 ms timer tick. With a 16 MHz timer clock,
+   PSC = 15999 is one suitable prescaler value.
+2. Configure CH1, CH2, CH3 and CH4 in Output Compare Toggle mode.
+3. Set the initial compare values to 250, 500, 750 and 1000 timer ticks.
+4. Enable the required TIM4 compare interrupts and start all four channels
+   with HAL_TIM_OC_Start_IT().
+5. In HAL_TIM_OC_DelayElapsedCallback(), identify the active channel and
+   update the corresponding onboard LED.
+6. Explain that a CCR value is an absolute timer count from the counter
+   start, while the 1 ms tick converts that count into milliseconds.
+7. Verify each event time and compare value with the SWD debugger. The timer
+   output pins themselves remain unconnected; no external wiring is allowed.
+
+====================================================================
+Q4. INDEPENDENT LED TOGGLE RATES USING OUTPUT COMPARE INTERRUPTS
+====================================================================
+
+Scenario:
+Four onboard LEDs must toggle independently at different rates:
+- PD12 every 200 ms
+- PD13 every 400 ms
+- PD14 every 600 ms
+- PD15 every 1000 ms
+
+Use TIM4 Output Compare interrupt mode. Each channel must schedule its next
+compare event by adding its interval to the previous compare value.
+
+Tasks:
+1. Configure TIM4 with a 1 ms timer tick.
+2. Configure four Output Compare channels in Toggle mode.
+3. Enable the TIM4 global interrupt.
+4. Start all channels with HAL_TIM_OC_Start_IT().
+5. Initialize each CCR to its first interval.
+6. In HAL_TIM_OC_DelayElapsedCallback(), toggle the matching onboard LED and
+   update its compare value with:
+
+      next_compare = previous_compare + interval_ticks
+
+7. Use __HAL_TIM_SET_COMPARE() or the equivalent HAL function. Allow normal
+   counter wrap-around instead of resetting the timer in the callback.
+8. Keep each callback short and verify the four rates using debugger values
+   and LED observations.
+
+====================================================================
+Q5. MEASURE USER-BUTTON INTERVAL USING INPUT CAPTURE
+====================================================================
+
+Scenario:
+The User button on PA0 is pressed twice. Measure the time between the two
+valid rising edges in milliseconds using timer input capture.
+
+Use TIM2 Channel 1. PA0 is the onboard button and also supports the TIM2_CH1
+alternate function on the STM32F407.
+
+Tasks:
+1. Configure TIM2 for a 1 ms timer tick. Use an ARR large enough to allow
+   the counter to run between button presses.
+2. Configure PA0 for TIM2_CH1 input capture using the board's button
+   connection and the correct pull configuration.
+3. Configure Channel 1 for Input Capture Direct Mode with Rising Edge
+   polarity.
+4. Select a suitable input filter and add software debounce so that switch
+   bounce is not interpreted as multiple presses.
+5. Enable the TIM2 global interrupt and start capture with
+   HAL_TIM_IC_Start_IT().
+6. Store the first and second timestamps in HAL_TIM_IC_CaptureCallback().
+7. Calculate the elapsed time, including the case where the timer counter
+   overflows between captures.
+8. Display a completed measurement by briefly blinking PD15 and inspect the
+   measured interval in the debugger.
+9. Keep SWD enabled.
+
+====================================================================
+Q6. ONBOARD ACCELEROMETER TILT SAFETY MONITOR
+====================================================================
+
+Scenario:
+Build a safety monitor that detects whether the Discovery board is tilted.
+Use the onboard LIS3DSH or LIS302DL accelerometer, depending on the board
+revision. No external sensor or alarm device may be used.
+
+Suggested direction indication:
+- Positive X tilt -> PD12
+- Negative X tilt -> PD14
+- Positive Y tilt -> PD13
+- Negative Y tilt -> PD15
+- Within the level band -> all four LEDs OFF
+
+Tasks:
+1. Configure the SPI peripheral, chip-select GPIO and any onboard
+   accelerometer interrupt GPIO required by the board schematic.
+2. Read and verify the accelerometer WHO_AM_I register before normal
+   operation. If the identity is incorrect, keep PD14 ON and enter an error
+   state.
+3. Sample X, Y and Z acceleration values every 100 ms using a timer-based
+   schedule.
+4. Establish a level reference at startup or when PA0 is pressed for at
+   least one second.
+5. Select and document a tilt threshold after observing level and tilted raw
+   readings.
+6. Turn on the direction LED for the dominant axis and sign.
+7. If the tilt exceeds the threshold continuously for 3 seconds, blink all
+   four LEDs as an onboard alarm indication.
+8. Clear the alarm only after the board remains within the safe range for
+   2 continuous seconds.
+9. Test level, slow tilt, brief shaking, sustained tilt and an accelerometer
+   identification failure. Inspect raw readings through SWD.
+
+====================================================================
+Q7. INTERNAL TEMPERATURE MONITOR USING ADC AND DMA
+====================================================================
+
+Scenario:
+Measure the MCU's internal temperature sensor without connecting an external
+analog source. Also sample VREFINT so that the ADC results can be checked for
+reasonable supply-voltage variation.
+
+Tasks:
+1. Configure ADC1 to scan the internal temperature-sensor channel and
+   VREFINT. Use the long sampling time recommended for internal channels.
+2. Configure a timer trigger at 100 ms and use DMA in circular mode to fill
+   a buffer containing at least 16 samples of each channel.
+3. Average the latest 16 temperature-sensor readings and the latest 16
+   VREFINT readings before updating the application state.
+4. Convert the readings using the STM32F407 reference information and record
+   the assumptions used for VDDA and temperature calibration. Relative
+   temperature thresholds are acceptable for a beginner implementation.
+5. Display four temperature ranges with PD12-PD15 and blink PD14 if the
+   selected high-temperature threshold is exceeded.
+6. Use PA0 to switch between live monitoring and a frozen snapshot mode.
+7. Start ADC-DMA operation with HAL and verify the circular buffer, transfer
+   position and averaged values in the debugger.
+8. Explain why an internal ADC channel satisfies the no-external-components
+   requirement and why the reading may change as the MCU warms up.
+
+====================================================================
+Q8. RTC-BASED ACCESS EVENT LOGGER
+====================================================================
+
+Scenario:
+Use the onboard User button as an access-event request. Every valid press
+must receive an RTC timestamp and be stored in RAM. The LEDs show activity;
+the SWD debugger is used to inspect the stored records. No display or UART
+terminal is required.
+
+Tasks:
+1. Configure the RTC with an initial date and time using an internal clock
+   source such as LSI, so no external crystal or component is required.
+2. Keep PD12 ON in the ready state.
+3. Configure PA0 as an EXTI input and apply software debounce so one physical
+   press creates one event.
+4. For each valid press, increment an event counter, read the RTC date and
+   time, store the record in a RAM ring buffer, and blink PD13 for 500 ms.
+5. Store at least the five most recent event records. Each record must contain
+   an event number and date/time fields.
+6. When the event count is a multiple of five, blink PD15 three times and
+   expose the five records for inspection in the debugger.
+7. Use PD14 for an invalid RTC or state error, and document how the error is
+   cleared.
+8. Test normal presses, a held button, rapid presses, event numbers 5 and 10,
+   and RTC rollover at a minute boundary.
+9. Keep interrupt handlers short and keep SWD enabled.
+
+====================================================================
+Q9. DMA-DRIVEN ONBOARD LED PATTERN PLAYER
+====================================================================
+
+Scenario:
+Play a repeating LED pattern from memory without repeatedly writing the GPIO
+register from the main loop. A timer update event must request DMA transfers
+to the GPIOD bit set/reset register (BSRR).
+
+Tasks:
+1. Create a Flash or RAM table containing a repeating sequence of LED masks.
+2. Configure a timer update event at 5 Hz or another documented rate.
+3. Configure DMA in circular memory-to-peripheral mode with source increment
+   enabled and the GPIOD BSRR destination fixed.
+4. Build each 32-bit BSRR table value so that the four previous LEDs are
+   cleared and the desired PD12-PD15 pattern is set.
+5. Start the timer and DMA. The main loop must not write the LED pattern on
+   every step.
+6. Verify that the LEDs repeat the pattern and that the DMA buffer index,
+   transfer-complete status and timer update event change as expected.
+7. Add a PA0-controlled pause/resume feature without stopping the debugger
+   connection.
+8. Test an all-OFF pattern, an all-ON pattern, a single-LED pattern and a
+   repeated pattern with consecutive identical entries.
+
+====================================================================
+Q10. WATCHDOG FAULT-RECOVERY CONTROLLER
+====================================================================
+
+Scenario:
+Use the Independent Watchdog to recover the system if the main application
+stops operating. The onboard LEDs must show normal operation and the reason
+for a watchdog reset.
+
+Tasks:
+1. Configure the IWDG using the internal LSI clock. Select a documented
+   timeout, such as approximately 2 seconds, using the actual or measured LSI
+   frequency.
+2. Use a periodic timer interrupt to set a heartbeat flag. The main loop may
+   refresh the watchdog only when the heartbeat and all required application
+   health checks are valid.
+3. Keep PD12 ON during healthy operation and periodically toggle PD13 as a
+   live-operation indicator.
+4. If PA0 is held for at least 3 seconds, enter a deliberate test-fault state
+   that stops watchdog refresh. Do not use an external fault switch.
+5. On the next startup, inspect the RCC reset flags. If the previous reset
+   was caused by IWDG, keep PD14 ON for 3 seconds, then return to normal.
+6. Clear the reset flags after recording the cause and expose the reset-cause
+   variable to the SWD debugger.
+7. Confirm that a healthy application does not reset and that a deliberately
+   stalled application recovers automatically.
+8. Keep SWD enabled, but document how debugger halting affects the watchdog
+   test and do not treat a paused debugger as proof of normal operation.
+
+====================================================================
+SUBMISSION REQUIREMENTS
+====================================================================
+
+For each question, submit:
+
+1. Complete STM32CubeIDE source code.
+2. A GPIO, timer-channel and peripheral configuration table.
+3. Timer calculations showing the clock, PSC, ARR and/or CCR values.
+4. A short explanation of the state machine or program flow.
+5. A debugger screenshot or recorded observation of the important variables,
+   registers, capture values, DMA state or reset flags.
+6. A test table containing the test condition, expected result, actual result
+   and pass/fail result.
+7. A brief note explaining how the implementation uses only onboard
+   STM32F407 Discovery resources.
+
+====================================================================
+CONCEPT COVERAGE
+====================================================================
+
+Q1  Base timer interrupt, software counters, periodic timing
+Q2  PWM generation, duty cycle, timer compare register
+Q3  Output Compare, scheduled events, CCR timing
+Q4  Output Compare interrupts, dynamic CCR updates, independent rates
+Q5  Input Capture, button timing, debounce and counter overflow
+Q6  Onboard SPI accelerometer, timer sampling and state detection
+Q7  Internal ADC, VREFINT, DMA circular buffering and averaging
+Q8  RTC, EXTI, debounce, RAM ring buffer and timestamps
+Q9  Timer-triggered DMA and GPIO BSRR pattern output
+Q10 IWDG, reset-cause detection, heartbeat monitoring and recovery
+
+====================================================================
+END OF ASSIGNMENT
+====================================================================
